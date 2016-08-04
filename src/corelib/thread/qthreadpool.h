@@ -38,13 +38,40 @@
 
 #include <QtCore/qthread.h>
 #include <QtCore/qrunnable.h>
+#include <QtCore/qwaitcondition.h>
 
 #ifndef QT_NO_THREAD
+
+#define QT_CUSTOM_THREADPOOL
 
 QT_BEGIN_NAMESPACE
 
 
 class QThreadPoolPrivate;
+class QThreadPool;
+
+/*
+ QThread wrapper, provides synchronization against a ThreadPool
+ */
+class Q_CORE_EXPORT QThreadPoolThread : public QThread
+{
+public:
+    QThreadPoolThread();
+    void run();
+    
+private:
+    
+    friend class QThreadPoolPrivate;
+    friend class QThreadPool;
+    
+    void registerThreadInactive();
+
+    QWaitCondition runnableReady;
+    QThreadPoolPrivate *manager;
+    QRunnable *runnable;
+};
+
+
 class Q_CORE_EXPORT QThreadPool : public QObject
 {
     Q_OBJECT
@@ -59,6 +86,7 @@ public:
     ~QThreadPool();
 
     static QThreadPool *globalInstance();
+    static void setGlobalInstance(QThreadPool* instance);
 
     void start(QRunnable *runnable, int priority = 0);
     bool tryStart(QRunnable *runnable);
@@ -78,6 +106,10 @@ public:
 
     void clear();
     void cancel(QRunnable *runnable);
+    
+protected:
+    
+    virtual QThreadPoolThread* createThreadPoolThread() const;
 };
 
 QT_END_NAMESPACE

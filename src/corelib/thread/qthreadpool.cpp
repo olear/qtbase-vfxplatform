@@ -39,24 +39,9 @@
 
 #ifndef QT_NO_THREAD
 
+static QScopedPointer<QThreadPool> gThreadPool(new QThreadPool());
+
 QT_BEGIN_NAMESPACE
-
-Q_GLOBAL_STATIC(QThreadPool, theInstance)
-
-/*
-    QThread wrapper, provides synchronization against a ThreadPool
-*/
-class QThreadPoolThread : public QThread
-{
-public:
-    QThreadPoolThread(QThreadPoolPrivate *manager);
-    void run() Q_DECL_OVERRIDE;
-    void registerThreadInactive();
-
-    QWaitCondition runnableReady;
-    QThreadPoolPrivate *manager;
-    QRunnable *runnable;
-};
 
 /*
     QThreadPool private class.
@@ -66,8 +51,8 @@ public:
 /*!
     \internal
 */
-QThreadPoolThread::QThreadPoolThread(QThreadPoolPrivate *manager)
-    :manager(manager), runnable(0)
+QThreadPoolThread::QThreadPoolThread()
+    :manager(0), runnable(0)
 { }
 
 /*
@@ -232,13 +217,20 @@ bool QThreadPoolPrivate::tooManyThreadsActive() const
     return activeThreadCount > maxThreadCount && (activeThreadCount - reservedThreads) > 1;
 }
 
+QThreadPoolThread* QThreadPool::createThreadPoolThread() const
+{
+    QThreadPoolThread* ret = new QThreadPoolThread();
+    ret->setObjectName(QLatin1String("Thread (pooled)"));
+    return ret;
+}
+
 /*!
     \internal
 */
 void QThreadPoolPrivate::startThread(QRunnable *runnable)
 {
-    QScopedPointer <QThreadPoolThread> thread(new QThreadPoolThread(this));
-    thread->setObjectName(QLatin1String("Thread (pooled)"));
+    QScopedPointer <QThreadPoolThread> thread(q_func()->createThreadPoolThread());
+    thread->manager = this;
     allThreads.insert(thread.data());
     ++activeThreads;
 
@@ -428,7 +420,13 @@ QThreadPool::~QThreadPool()
 */
 QThreadPool *QThreadPool::globalInstance()
 {
-    return theInstance();
+    return gThreadPool.data();
+}
+
+void
+QThreadPool::setGlobalInstance(QThreadPool* instance)
+{
+    gThreadPool.reset(instance);
 }
 
 /*!
